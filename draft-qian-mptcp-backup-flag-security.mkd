@@ -1,0 +1,147 @@
+---
+title: Backup flag attack via MP_PRIO messages
+abbrev: 
+docname: draft-mptcp-backup-flag-attack-01
+date: 2017-08-05
+category: exp
+
+ipr: trust200902
+area: Transport
+workgroup: MPTCP Working Group
+keyword: Internet-Draft
+
+coding: us-ascii 
+stand_alone: yes
+pi: [toc, sortrefs, symrefs]
+
+author:
+ -
+  ins: A. Munir
+  name: Ali Munir
+  organization: Michigan State University
+  email: munirali@msu.edu
+ -
+  ins: Z. Qian
+  name: Zhiyun Qian
+  organization: University of California, Riverside
+  email: zhiyunq@cs.ucr.edu
+ -
+  ins: Z. Shafiq
+  name: Zubair Shafiq
+  organization: University of Iowa
+  email: zubair-shafiq@uiowa.edu
+ -
+  ins: A. Liu
+  name: Alex Liu
+  organization: Michigan State University
+  email: alexliu@cse.msu.edu
+ -
+  ins: F. Le
+  name: Franck Le
+  organization: IBM T. J. Watson Research Center
+  email: fle@us.ibm.com
+
+
+
+normative:
+  RFC6824:
+  ICNP2017:
+    title: Multipath TCP Traffic Diversion Attacks and Countermeasures
+    author:
+      - ins: A. Munir
+      - ins: Z. Qian
+      - ins: Z. Shafiq
+      - ins: A. Liu 
+      - ins: F. Le
+    seriesinfo: Proceedings of the 2017 IEEE International Conference on Network Protocols
+    date: Oct. 2017
+
+informative:
+  RFC6182:
+
+                   
+--- abstract
+
+This document discusses a security flaw that allows a MITM attacker on a single path to divert
+all traffic to its own path, effectively hijacking the entire MPTCP connection. An associated but less severe 
+problem is that the attacker can offload its traffic 
+
+--- middle
+
+# Introduction  {#intro}
+
+MPTCP supports using subflows as backup – i.e., using a
+subflow to send data only if there is no other subflow
+available. Specifically, an MPTCP host can send a request to the other
+host to set any subflow as a backup by using the MPTCP MP_PRIO
+option. Hosts can request change in the priority to use a
+subflow as regular or backup.  To set a subflow as
+backup, a host can request a change in the subflow priority by
+sending MPTCP MP_PRIO option to the other host with the corresponding
+address identifier. The key property of MP_PRIO messages is that they
+can be sent on any subflow (see last paragraph of section 3.3.8 of {{RFC6824}}). 
+The reason is that if a subflow is already congested (e.g., out of radio coverage), 
+no message (including MP_PRIO) can be delivered on the subflow itself. 
+After receiving such a control packet,
+the sender will stop sending data and the corresponding subflow’s throughput will drop to zero.
+
+Unfortunately, unlike MP_JOIN, such a MP_PRIO option has no
+authentication required by the specification whatsoever, allowing an
+attacker controlling only one path to set any subflow as backup
+and launch traffic divergence and connection hijack attacks. The
+backup flag vulnerability allows an attacker to divert traffic among
+MPTCP subflows. An attacker can offload traffic from the
+eavesdropped subflow to other MPTCP subflows by sending
+forged packets with the MP_PRIO option to set the eavesdropped
+subflow as a backup. An attacker can also onload traffic from
+non-eavesdropped subflows to the eavesdropped subflow by
+sending forged packets with the MP_PRIO option to set all other
+subflows as backup. This attack is similar to connection hijack
+attack, where an attacker diverts all the traffic to pass through the
+subflow on the eavesdropped path.
+
+# Connection Hijack Attack and Security Scope of MPTCP
+
+To hijack traffic from all subflows to the one eavesdropped by the attacker,
+an attacker only needs to know the address identifier of the host, 
+which can be easily guessed as they are set incrementally in the current Linux
+implementation of MPTCP. Even if it is randomized, since the identifier has only 8 bits, 
+it can even be brute forced. Assuming host A and B are communicating with two subflows (and only one is eavesdropped),
+to set a non-eavesdropped subflow as backup, an attacker can request a change in the
+subflow priority by sending MPTCP MP_PRIO option to host B with
+the address identifier of host A. 
+Note that a backup MPTCP subflow may still be used
+for data transmission later, which can be detected by the attacker by
+observing the overall MPTCP throughput {{ICNP2017}} --- whether global sequence numbers
+and the local sequence numbers are progressing at the same rate.
+
+Effectively, this attack degrades an MPTCP connection to a regular TCP
+connection as all traffic will be routed through the
+attacker-controlled path. 
+As discussed in {{RFC6182}}, MPTCP's design is to provide a security model no worse than TCP.
+This vulnerability makes MPTCP less secure than TCP, because the entire MPTCP connection can be
+compromised (fully controlled by an attacker) as long as ANY one of
+the communication paths is compromised. In other words, MPTCP now has an increased attack surface 
+which makes it more likely to be completely controlled by an attacker compared to TCP.
+
+
+# Removal of Address_ID in MP_PRIO messages
+
+We discuss several solutions in a forthcoming paper {{ICNP2017}}, but a
+simple approach to cope with this attack would be to reconsider the
+utilisation of the address identifier in the MP_PRIO option. This
+option allows a host to set/change the priority of all the subflows
+associated to a given address identifier on another subflow. It could
+have use cases, such as sending MP_PRIO over a WiFi subflow to put the
+cellular subflow in backup mode without sending a packet over the
+cellular interface or setting the cellular subflow as backup when no radio coverage is detected, 
+but these look like edge cases. 
+If the MP_PRIO option does not include an address identifier, then it becomes impossible for
+an attacker who is on-path of a given subflow to change the priority
+of the other subflows.
+
+
+
+
+
+
